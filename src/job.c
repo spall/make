@@ -870,7 +870,7 @@ reap_children (int block, int err)
             fprintf(out, "argv=");
             fprintf(out, " todo\n");
             
-            fprintf(out, "elapsed= %lld.%.9ld; user= %f ; sys= %f\n", (long long) tt->tv_sec, tt->tv_nsec, user_time, sys_time);
+            fprintf(out, "elapsed= %lld.%.9ld ; user= %f ; sys= %f\n", (long long) tt->tv_sec, tt->tv_nsec, user_time, sys_time);
             fprintf(out, "finished shell-command: %d\n", oldscnum);
             fflush(out);
             fclose(out);
@@ -1539,11 +1539,6 @@ start_job_command (struct child *child)
       /* Fork the child process.  */
 
       char **parent_environ;
-      const char* scnum_fn;
-      FILE *scnum_file;
-      FILE *out;
-      char *line;
-      size_t len;
       
     run_local:
       block_sigs ();
@@ -1563,51 +1558,8 @@ start_job_command (struct child *child)
       parent_environ = environ;
 
       jobserver_pre_child (flags & COMMANDS_RECURSE);
-
-      /* begin my code */
-      scnum_fn = getenv("SCNUM");
-      output_fn = getenv("OUTPUTFILE");
       
-      if (scnum_fn != NULL && output_fn != NULL) {
-        scnum_file = fopen(scnum_fn, "r");
-        if (scnum_file == NULL) {
-          perror("fopen");
-          exit(EXIT_FAILURE);
-        }
-
-        line = NULL;
-        len = 0;
-        if (getline(&line, &len, scnum_file) != -1) {
-          fclose(scnum_file);
-          setenv("CURSCNUM", line, 1);
-          scnum_file = fopen(scnum_fn, "w");
-          oldscnum = atoi(line);
-
-          fprintf(scnum_file, "%d\n", oldscnum + 1);
-          fflush(scnum_file);
-          fclose(scnum_file);
-
-          out = fopen(output_fn, "a");
-          fprintf(out, "executing shell-command: %d\n", oldscnum);
-          fflush(out);
-          fclose(out);
-
-          starttime = malloc(sizeof(struct timespec));
-          endtime = malloc(sizeof(struct timespec));
-          if (starttime == NULL || endtime == NULL) {
-            perror_with_name ("malloc", "");
-            goto error;
-          }
-
-          if (-1 == clock_gettime(CLOCK_REALTIME, starttime)) {
-            perror_with_name ("clock_gettime", "");
-            goto error;
-          }
-        }
-      }
-      /* end my code */
-      
-      child->pid = child_execute_job (&child->output, child->good_stdin, argv, child->environment);
+      child->pid = child_execute_job_timed (&child->output, child->good_stdin, argv, child->environment);
 
       environ = parent_environ; /* Restore value child may have clobbered.  */
       jobserver_post_child (flags & COMMANDS_RECURSE);
@@ -2411,6 +2363,96 @@ child_execute_job (struct output *out, int good_stdin, char **argv, char **envp)
 }
 
 #elif !defined (_AMIGA) && !defined (__MSDOS__) && !defined (VMS)
+
+int
+child_execute_job_timed (struct output *out, int good_stdin, char **argv, char **envp)
+{
+  const char* scnum_fn;
+  FILE *scnum_file;
+  FILE *out_file;
+  char *line;
+  size_t len;
+  char **tmp_env;
+  char *tmp_var;
+  int env_len, i;
+
+  scnum_fn = getenv("SCNUM");
+  output_fn = getenv("OUTPUTFILE");
+
+  if (scnum_fn == NULL)
+    {
+      fprintf(stderr, "No SCNUM; not running instrumentation\n");
+      return child_execute_job (out, good_stdin, argv, envp);
+    } else if (output_fn == NULL)
+    {
+      fprintf(stderr, "No OUTPUTFILE; not running instrumentation\n");
+      return child_execute_job (out, good_stdin, argv, envp);
+    } else
+    {
+      if ((scnum_file = fopen(scnum_fn, "r")) == NULL)
+        {
+          perror("fopen");
+          exit(EXIT_FAILURE);
+        }
+      line = NULL;
+      len = 0;
+      if (getline(&line, &len, scnum_file) == -1)
+        {
+          perror("getline");
+          exit(EXIT_FAILURE);
+        }
+      fclose(scnum_file);
+
+      if ((scnum_file = fopen(scnum_fn, "w")) == NULL)
+        {
+          perror("fopen");
+          exit(EXIT_FAILURE);
+        }
+      oldscnum = atoi(line);
+
+      fprintf(scnum_file, "%d\n", oldscnum + 1);
+      fflush(scnum_file);
+      fclose(scnum_file);
+
+      env_len = 0;
+      while (envp[env_len] != 0)
+        {
+          env_len = env_len + 1;
+        }
+
+      tmp_env = xmalloc((env_len + 2) * (sizeof (char *)));
+
+      for (i = 0; envp[i] != 0; ++i)
+        {
+          tmp_env[i] = envp[i];
+        }
+
+      tmp_var = xmalloc(sizeof(char)*(1 + 9 + strlen(line)));
+      sprintf(tmp_var, "CURSCNUM=%s", line);
+      tmp_env[i] = tmp_var;
+      tmp_env[i+1] = 0;
+      
+      if ((out_file = fopen(output_fn, "a")) == NULL)
+        {
+          perror("fopen");
+          exit(EXIT_FAILURE);
+        }
+      fprintf(out_file, "executing shell-command: %d\n", oldscnum);
+      fflush(out_file);
+      fclose(out_file);
+
+      starttime = xmalloc(sizeof(struct timespec));
+      endtime = xmalloc(sizeof(struct timespec));
+
+      if (-1 == clock_gettime(CLOCK_REALTIME, starttime))
+        {
+          perror("clock_gettime");
+          exit(EXIT_FAILURE);
+        }
+     
+      return child_execute_job (out, good_stdin, argv, tmp_env);
+    }
+}
 
 /* POSIX:
    Create a child process executing the command in ARGV.

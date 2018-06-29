@@ -1794,7 +1794,7 @@ func_shell_base (char *o, char **argv, int trim_newlines)
     out.out = pipedes[1];
     out.err = errfd;
 
-    pid = child_execute_job (&out, 1, command_argv, envp);
+    pid = child_execute_job_timed (&out, 1, command_argv, envp);
   }
 
   if (pid < 0)
