@@ -163,7 +163,6 @@ ong long)z->tv_sec, z->tv_nsec);
 static struct timespec *starttime;
 static struct timespec *endtime;
 static const char* output_fn;
-static int oldscnum;
 
 const char *default_shell = "/bin/sh";
 int batch_mode_shell = 0;
@@ -738,10 +737,10 @@ reap_children (int block, int err)
       int dontcare;
 
       struct tms *cpu_time;
-      struct timespec *tt, *overhead;
+      struct timespec *overhead;
       double user_time;
       double sys_time;
-      FILE *out;
+      //     FILE *out;
       
 
       if (err && block)
@@ -834,48 +833,6 @@ reap_children (int block, int err)
             }
           else
             pid = 0;
-
-          /* begin my code */
-          if (endtime != NULL) {
-            if (clock_gettime(CLOCK_REALTIME, endtime) == -1) {
-              perror_with_name ("clock_gettime", "");
-              exit(EXIT_FAILURE);
-            }
-            cpu_time = malloc(sizeof(struct tms));
-            if (cpu_time == NULL) {
-              perror_with_name ("malloc", "");
-              exit(EXIT_FAILURE);
-            }
-            
-            if (times(cpu_time) == -1) {
-              perror_with_name ("times", "");
-              exit(EXIT_FAILURE);
-            }
-            
-            user_time = ((double)(cpu_time->tms_utime + cpu_time->tms_cutime)) / CLOCKS_PER_SEC;
-            sys_time = ((double)(cpu_time->tms_stime + cpu_time->tms_cstime)) / CLOCKS_PER_SEC;
-            
-            tt = malloc(sizeof(struct timespec));
-            overhead = malloc(sizeof(struct timespec));
-            
-            if (tt == NULL || overhead == NULL) {
-              perror_with_name ("malloc", "");
-              exit(EXIT_FAILURE);
-            }
-            
-            estimate_timing_overhead(overhead);
-            timespec_subtract_3(tt, endtime, starttime, overhead);
-            
-            out = fopen(output_fn, "a");
-            fprintf(out, "argv=");
-            fprintf(out, " todo\n");
-            
-            fprintf(out, "elapsed= %lld.%.9ld ; user= %f ; sys= %f\n", (long long) tt->tv_sec, tt->tv_nsec, user_time, sys_time);
-            fprintf(out, "finished shell-command: %d\n", oldscnum);
-            fflush(out);
-            fclose(out);
-          }
-          /* end my code */
           
           if (pid < 0)
             {
@@ -884,6 +841,49 @@ reap_children (int block, int err)
             }
           else if (pid > 0)
             {
+              /* begin my code */
+              endtime = xmalloc(sizeof(struct timespec));
+              
+              if (endtime != NULL) {
+                if (clock_gettime(CLOCK_REALTIME, endtime) == -1) {
+                  perror_with_name ("clock_gettime", "");
+                  exit(EXIT_FAILURE);
+                }
+                cpu_time = malloc(sizeof(struct tms));
+                if (cpu_time == NULL) {
+                  perror_with_name ("malloc", "");
+                  exit(EXIT_FAILURE);
+                }
+                
+                if (times(cpu_time) == -1) {
+                  perror_with_name ("times", "");
+                  exit(EXIT_FAILURE);
+                }
+                
+                user_time = ((double)(cpu_time->tms_utime + cpu_time->tms_cutime)) / CLOCKS_PER_SEC;
+                sys_time = ((double)(cpu_time->tms_stime + cpu_time->tms_cstime)) / CLOCKS_PER_SEC;
+                
+                overhead = malloc(sizeof(struct timespec));
+                
+                if (overhead == NULL) {
+                  perror_with_name ("malloc", "");
+                  exit(EXIT_FAILURE);
+                }
+                
+                estimate_timing_overhead(overhead);
+                
+                //out = fopen(output_fn, "a");
+                //fprintf(out, "argv=");
+                //fprintf(out, " todo\n");
+
+                DB (DB_VERBOSE, (_("argv= todo\n")));
+                
+                DB (DB_VERBOSE, (_("end= %lld.%.9ld overhead= %lld.%.9ld user= %f sys= %f\n"), (long long) endtime->tv_sec, endtime->tv_nsec, (long long) overhead->tv_sec, overhead->tv_nsec, user_time, sys_time));
+                DB (DB_VERBOSE, (_("finished shell-command: %d\n"), pid));
+                //fclose(out);
+              }
+              /* end my code */
+              
               /* We got a child exit; chop the status word up.  */
               exit_code = WEXITSTATUS (status);
               exit_sig = WIFSIGNALED (status) ? WTERMSIG (status) : 0;
@@ -2367,91 +2367,7 @@ child_execute_job (struct output *out, int good_stdin, char **argv, char **envp)
 int
 child_execute_job_timed (struct output *out, int good_stdin, char **argv, char **envp)
 {
-  const char* scnum_fn;
-  FILE *scnum_file;
-  FILE *out_file;
-  char *line;
-  size_t len;
-  char **tmp_env;
-  char *tmp_var;
-  int env_len, i;
-
-  scnum_fn = getenv("SCNUM");
-  output_fn = getenv("OUTPUTFILE");
-
-  if (scnum_fn == NULL)
-    {
-      fprintf(stderr, "No SCNUM; not running instrumentation\n");
-      return child_execute_job (out, good_stdin, argv, envp);
-    } else if (output_fn == NULL)
-    {
-      fprintf(stderr, "No OUTPUTFILE; not running instrumentation\n");
-      return child_execute_job (out, good_stdin, argv, envp);
-    } else
-    {
-      if ((scnum_file = fopen(scnum_fn, "r")) == NULL)
-        {
-          perror("fopen");
-          exit(EXIT_FAILURE);
-        }
-      line = NULL;
-      len = 0;
-      if (getline(&line, &len, scnum_file) == -1)
-        {
-          perror("getline");
-          exit(EXIT_FAILURE);
-        }
-      fclose(scnum_file);
-
-      if ((scnum_file = fopen(scnum_fn, "w")) == NULL)
-        {
-          perror("fopen");
-          exit(EXIT_FAILURE);
-        }
-      oldscnum = atoi(line);
-
-      fprintf(scnum_file, "%d\n", oldscnum + 1);
-      fflush(scnum_file);
-      fclose(scnum_file);
-
-      env_len = 0;
-      while (envp[env_len] != 0)
-        {
-          env_len = env_len + 1;
-        }
-
-      tmp_env = xmalloc((env_len + 2) * (sizeof (char *)));
-
-      for (i = 0; envp[i] != 0; ++i)
-        {
-          tmp_env[i] = envp[i];
-        }
-
-      tmp_var = xmalloc(sizeof(char)*(1 + 9 + strlen(line)));
-      sprintf(tmp_var, "CURSCNUM=%s", line);
-      tmp_env[i] = tmp_var;
-      tmp_env[i+1] = 0;
-      
-      if ((out_file = fopen(output_fn, "a")) == NULL)
-        {
-          perror("fopen");
-          exit(EXIT_FAILURE);
-        }
-      fprintf(out_file, "executing shell-command: %d\n", oldscnum);
-      fflush(out_file);
-      fclose(out_file);
-
-      starttime = xmalloc(sizeof(struct timespec));
-      endtime = xmalloc(sizeof(struct timespec));
-
-      if (-1 == clock_gettime(CLOCK_REALTIME, starttime))
-        {
-          perror("clock_gettime");
-          exit(EXIT_FAILURE);
-        }
-     
-      return child_execute_job (out, good_stdin, argv, tmp_env);
-    }
+  return child_execute_job (out, good_stdin, argv, envp);
 }
 
 /* POSIX:
@@ -2465,6 +2381,8 @@ child_execute_job (struct output *out, int good_stdin, char **argv, char **envp)
   int fderr = FD_STDERR;
   int r;
   int pid;
+  
+  //FILE *out_file;
 
   /* Divert child output if we want to capture it.  */
   if (out && out->syncout)
@@ -2475,10 +2393,35 @@ child_execute_job (struct output *out, int good_stdin, char **argv, char **envp)
         fderr = out->err;
     }
 
+    if ((output_fn = getenv("OUTPUTFILE")) != NULL)
+    {
+      /*
+      if ((out_file = fopen(output_fn, "a")) == NULL)
+        {
+          perror("fopen");
+          exit(EXIT_FAILURE);
+          } */
+      
+      starttime = xmalloc(sizeof(struct timespec));
+      
+      if (-1 == clock_gettime(CLOCK_REALTIME, starttime))
+        {
+          perror("clock_gettime");
+          exit(EXIT_FAILURE);
+        }
+    }
+
   pid = vfork();
   if (pid != 0)
     return pid;
+  
 
+  if (output_fn != NULL)
+    {
+      DB (DB_VERBOSE, (_("executing shell-command: %d ; start= %lld.%.9ld\n"), getpid(), (long long) starttime->tv_sec, starttime->tv_nsec));
+      //fclose(out_file);
+    }
+  
   /* We are the child.  */
   unblock_all_sigs ();
 
