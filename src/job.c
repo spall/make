@@ -834,48 +834,6 @@ reap_children (int block, int err)
             }
           else
             pid = 0;
-
-          /* begin my code */
-          if (endtime != NULL) {
-            if (clock_gettime(CLOCK_REALTIME, endtime) == -1) {
-              perror_with_name ("clock_gettime", "");
-              exit(EXIT_FAILURE);
-            }
-            cpu_time = malloc(sizeof(struct tms));
-            if (cpu_time == NULL) {
-              perror_with_name ("malloc", "");
-              exit(EXIT_FAILURE);
-            }
-            
-            if (times(cpu_time) == -1) {
-              perror_with_name ("times", "");
-              exit(EXIT_FAILURE);
-            }
-            
-            user_time = ((double)(cpu_time->tms_utime + cpu_time->tms_cutime)) / CLOCKS_PER_SEC;
-            sys_time = ((double)(cpu_time->tms_stime + cpu_time->tms_cstime)) / CLOCKS_PER_SEC;
-            
-            tt = malloc(sizeof(struct timespec));
-            overhead = malloc(sizeof(struct timespec));
-            
-            if (tt == NULL || overhead == NULL) {
-              perror_with_name ("malloc", "");
-              exit(EXIT_FAILURE);
-            }
-            
-            estimate_timing_overhead(overhead);
-            timespec_subtract_3(tt, endtime, starttime, overhead);
-            
-            out = fopen(output_fn, "a");
-            fprintf(out, "argv=");
-            fprintf(out, " todo\n");
-            
-            fprintf(out, "elapsed= %lld.%.9ld ; user= %f ; sys= %f\n", (long long) tt->tv_sec, tt->tv_nsec, user_time, sys_time);
-            fprintf(out, "finished shell-command: %d\n", oldscnum);
-            fflush(out);
-            fclose(out);
-          }
-          /* end my code */
           
           if (pid < 0)
             {
@@ -884,6 +842,48 @@ reap_children (int block, int err)
             }
           else if (pid > 0)
             {
+              /* begin my code */
+              if (endtime != NULL) {
+                if (clock_gettime(CLOCK_REALTIME, endtime) == -1) {
+                  perror_with_name ("clock_gettime", "");
+                  exit(EXIT_FAILURE);
+                }
+                cpu_time = malloc(sizeof(struct tms));
+                if (cpu_time == NULL) {
+                  perror_with_name ("malloc", "");
+                  exit(EXIT_FAILURE);
+                }
+            
+                if (times(cpu_time) == -1) {
+                  perror_with_name ("times", "");
+                  exit(EXIT_FAILURE);
+                }
+            
+                user_time = ((double)(cpu_time->tms_utime + cpu_time->tms_cutime)) / CLOCKS_PER_SEC;
+                sys_time = ((double)(cpu_time->tms_stime + cpu_time->tms_cstime)) / CLOCKS_PER_SEC;
+            
+                tt = malloc(sizeof(struct timespec));
+                overhead = malloc(sizeof(struct timespec));
+            
+                if (tt == NULL || overhead == NULL) {
+                  perror_with_name ("malloc", "");
+                  exit(EXIT_FAILURE);
+                }
+            
+                estimate_timing_overhead(overhead);
+                timespec_subtract_3(tt, endtime, starttime, overhead);
+            
+                out = fopen(output_fn, "a");
+                fprintf(out, "argv=");
+                fprintf(out, " todo\n");
+            
+                fprintf(out, "elapsed= %lld.%.9ld ; user= %f ; sys= %f\n", (long long) tt->tv_sec, tt->tv_nsec, user_time, sys_time);
+                fprintf(out, "[%d] finished shell-command: %d\n", pid, oldscnum);
+                fflush(out);
+                fclose(out);
+              }
+              /* end my code */
+              
               /* We got a child exit; chop the status word up.  */
               exit_code = WEXITSTATUS (status);
               exit_sig = WIFSIGNALED (status) ? WTERMSIG (status) : 0;
