@@ -2374,7 +2374,7 @@ child_execute_job_timed (struct output *out, int good_stdin, char **argv, char *
   size_t len;
   char **tmp_env;
   char *tmp_var;
-  int env_len, i;
+  int env_len, i, a;
 
   scnum_fn = getenv("SCNUM");
   output_fn = getenv("OUTPUTFILE");
@@ -2437,7 +2437,13 @@ child_execute_job_timed (struct output *out, int good_stdin, char **argv, char *
           perror("fopen");
           exit(EXIT_FAILURE);
         }
-      fprintf(out_file, "executing shell-command: %d\n", oldscnum);
+      fprintf(out_file, "executing shell-command: %d ; ", oldscnum);
+      a = 0;
+      while (argv[a] != NULL) {
+        fprintf(out_file, "%s ", argv[a]);
+	a = a + 1;
+      }
+      fprintf(out_file, "\n");
       fflush(out_file);
       fclose(out_file);
 
