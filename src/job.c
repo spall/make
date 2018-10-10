@@ -2437,12 +2437,13 @@ child_execute_job_timed (struct output *out, int good_stdin, char **argv, char *
           perror("fopen");
           exit(EXIT_FAILURE);
         }
-      fprintf(out_file, "executing shell-command: %d ; ", oldscnum);
+      fprintf(out_file, "executing shell-command: %d ; %s ; ", oldscnum, getenv("PWD"));
       a = 0;
       while (argv[a] != NULL) {
         fprintf(out_file, "%s ", argv[a]);
 	a = a + 1;
       }
+   
       fprintf(out_file, "\n");
       fflush(out_file);
       fclose(out_file);
