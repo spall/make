@@ -2438,7 +2438,7 @@ child_execute_job_timed (struct output *out, int good_stdin, char **argv, char *
           exit(EXIT_FAILURE);
         }
       fprintf(out_file, "executing shell-command: %d ; %s ; ", oldscnum, getenv("PWD"));
-      a = 2;
+      a = 0;
       while (argv[a] != NULL) {
         fprintf(out_file, "%s ", argv[a]);
 	a = a + 1;
