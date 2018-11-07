@@ -846,7 +846,9 @@ update_file_1 (struct file *file, unsigned int depth)
       DBF (DB_BASIC, _("Failed to remake target file '%s'.\n"));
       break;
     case us_success:
-      DBF (DB_BASIC, _("Successfully remade target file '%s'.\n"));
+      DBF (DB_BASIC, _("Successfully remade target file '%s'. "));
+      printf ("PHONY? %d . LAST_MTIME = %lu  %lu .\n", file->phony, file->last_mtime, file->mtime_before_update);
+      fflush (stdout);
       break;
     case us_question:
       DBF (DB_BASIC, _("Target file '%s' needs to be remade under -q.\n"));
