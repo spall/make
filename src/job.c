@@ -1432,12 +1432,11 @@ start_job_command (struct child *child)
        output ensure any already-synced content is written.  */
     output_dump (&child->output);
 #endif
-
   /* Print the command if appropriate.  */
   if (just_print_flag || trace_flag
       || (!(flags & COMMANDS_SILENT) && !silent_flag))
     OS (message, 0, "%s", p);
-
+  
   /* Tell update_goal_chain that a command has been started on behalf of
      this target.  It is important that this happens here and not in
      reap_children (where we used to do it), because reap_children might be
@@ -1559,7 +1558,7 @@ start_job_command (struct child *child)
 
       jobserver_pre_child (flags & COMMANDS_RECURSE);
       
-      child->pid = child_execute_job_timed (&child->output, child->good_stdin, argv, child->environment);
+      child->pid = child_execute_job_timed (&child->output, child->good_stdin, argv, child->environment, p);
 
       environ = parent_environ; /* Restore value child may have clobbered.  */
       jobserver_post_child (flags & COMMANDS_RECURSE);
@@ -2365,7 +2364,7 @@ child_execute_job (struct output *out, int good_stdin, char **argv, char **envp)
 #elif !defined (_AMIGA) && !defined (__MSDOS__) && !defined (VMS)
 
 int
-child_execute_job_timed (struct output *out, int good_stdin, char **argv, char **envp)
+child_execute_job_timed (struct output *out, int good_stdin, char **argv, char **envp, char *p)
 {
   const char* scnum_fn;
   FILE *scnum_file;
@@ -2374,7 +2373,7 @@ child_execute_job_timed (struct output *out, int good_stdin, char **argv, char *
   size_t len;
   char **tmp_env;
   char *tmp_var;
-  int env_len, i, a;
+  int env_len, i;
 
   scnum_fn = getenv("SCNUM");
   output_fn = getenv("OUTPUTFILE");
@@ -2438,13 +2437,8 @@ child_execute_job_timed (struct output *out, int good_stdin, char **argv, char *
           exit(EXIT_FAILURE);
         }
       fprintf(out_file, "executing shell-command: %d ; %s ; ", oldscnum, getenv("PWD"));
-      a = 0;
-      while (argv[a] != NULL) {
-        fprintf(out_file, "%s ", argv[a]);
-	a = a + 1;
-      }
-   
-      fprintf(out_file, "\n");
+      fprintf(out_file, "%s\n", p);
+
       fflush(out_file);
       fclose(out_file);
 

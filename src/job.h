@@ -63,7 +63,7 @@ char **construct_command_argv (char *line, char **restp, struct file *file,
 int child_execute_job (struct child *child, char *argv);
 #else
 int child_execute_job (struct output *out, int good_stdin, char **argv, char **envp);
-int child_execute_job_timed (struct output *out, int good_stdin, char **argv, char **envp);
+int child_execute_job_timed (struct output *out, int good_stdin, char **argv, char **envp, char *p);
 #endif
 
 
