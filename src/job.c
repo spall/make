@@ -2374,6 +2374,7 @@ child_execute_job_timed (struct output *out, int good_stdin, char **argv, char *
   char **tmp_env;
   char *tmp_var;
   int env_len, i;
+  char cwd[PATH_MAX];
 
   scnum_fn = getenv("SCNUM");
   output_fn = getenv("OUTPUTFILE");
@@ -2436,7 +2437,12 @@ child_execute_job_timed (struct output *out, int good_stdin, char **argv, char *
           perror("fopen");
           exit(EXIT_FAILURE);
         }
-      fprintf(out_file, "executing shell-command: %d ; %s ; ", oldscnum, getenv("PWD"));
+      
+      if (getcwd(cwd, sizeof(cwd)) == NULL) {
+	perror("getcwd");
+	exit(EXIT_FAILURE);
+      }
+      fprintf(out_file, "executing shell-command: %d ; %s ; ", oldscnum, cwd);
       fprintf(out_file, "%s\n", p);
 
       fflush(out_file);
