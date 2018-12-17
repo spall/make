@@ -160,6 +160,7 @@ ong long)z->tv_sec, z->tv_nsec);
   return EXIT_SUCCESS;
 }
 
+static struct timespec *ts;
 static struct timespec *starttime;
 static struct timespec *endtime;
 static const char* output_fn;
@@ -878,7 +879,7 @@ reap_children (int block, int err)
                 fprintf(out, " todo\n");
             
                 fprintf(out, "elapsed= %lld.%.9ld ; user= %f ; sys= %f\n", (long long) tt->tv_sec, tt->tv_nsec, user_time, sys_time);
-                fprintf(out, "[%d] finished shell-command: %d\n", pid, oldscnum);
+                fprintf(out, "[%d_%lld%ld] finished shell-command: %d\n", pid, (long long) ts->tv_sec, ts->tv_nsec, oldscnum);
                 fflush(out);
                 fclose(out);
               }
@@ -2370,11 +2371,13 @@ child_execute_job_timed (struct output *out, int good_stdin, char **argv, char *
   FILE *scnum_file;
   FILE *out_file;
   char *line;
+  char tstamp[256]; // hopefully too big
   size_t len;
   char **tmp_env;
   char *tmp_var;
   int env_len, i;
   char cwd[PATH_MAX];
+  int tmp_fd;
 
   scnum_fn = getenv("SCNUM");
   output_fn = getenv("OUTPUTFILE");
@@ -2426,10 +2429,30 @@ child_execute_job_timed (struct output *out, int good_stdin, char **argv, char *
         {
           tmp_env[i] = envp[i];
         }
+      
+      ts = xmalloc(sizeof(struct timespec));
+     
+      if (clock_gettime(CLOCK_REALTIME, ts) == -1) {
+	perror("clock_gettime");
+	exit(EXIT_FAILURE);
+      }
+      // how to write ts.tv_sec and ts.tv_nsec to tstamp?????
+      sprintf(tstamp, "%lld%ld", (long long) ts->tv_sec, ts->tv_nsec);
+      
 
       tmp_var = xmalloc(sizeof(char)*(1 + 9 + strlen(line)));
       sprintf(tmp_var, "CURSCNUM=%s", line);
       tmp_env[i] = tmp_var;
+
+      tmp_fd = open("/tmp/tstamp", O_RDWR|O_CREAT, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH);
+      if (tmp_fd < 0) {
+	perror("open tstamp tmp\n");
+	exit(EXIT_FAILURE);
+      }
+
+      write(tmp_fd, tstamp, strlen(tstamp));
+      close(tmp_fd);
+
       tmp_env[i+1] = 0;
       
       if ((out_file = fopen(output_fn, "a")) == NULL)
